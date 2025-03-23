@@ -10,7 +10,17 @@ import torch.nn.functional as F
 from monai.metrics import compute_meandice
 from torch.autograd import Variable
 from dataloaders.saliency_balancing_fusion import get_SBF_map
+import torch
+import torch.nn as nn
+import matplotlib.pyplot as plt
+from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+from torchvision.transforms import functional as F
+from PIL import Image
+import numpy as np
 print = functools.partial(print, flush=True)
+
+model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
+feature_extractor = SegformerFeatureExtractor.from_pretrained(model_name)
 
 def train_warm_up(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -124,19 +134,25 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
             visual_dict['GT']=lbl.detach().cpu().numpy()[0]
         else:
             visual_dict=None
-
+        
+        GLA_img = feature_extractor(images=GLA_img, return_tensors="pt")
         input_var = Variable(GLA_img, requires_grad=True)
 
         optimizer.zero_grad()
-        logits = model(input_var)
+        logits, attentions = model(input_var["pixel_values"])
+        print(logits.shape)
+        print(attention_map.shape)
         loss_dict = criterion.get_loss(logits, lbl)
         losses = sum(loss_dict[k] * criterion.weight_dict[k] for k in loss_dict.keys() if k in criterion.weight_dict)
         losses.backward(retain_graph=True)
 
         # saliency
-        gradient = torch.sqrt(torch.mean(input_var.grad ** 2, dim=1, keepdim=True)).detach()
+        # Extract attention maps from last layer
+        attention_map = attentions[-1].squeeze().mean(dim=0).cpu().numpy()
 
-        saliency=get_SBF_map(gradient,config.grid_size)
+        # gradient = torch.sqrt(torch.mean(input_var.grad ** 2, dim=1, keepdim=True)).detach()
+
+        saliency=get_SBF_map(attention_map,config.grid_size)
 
         if visual_dict is not None:
             visual_dict['GLA_pred']=torch.argmax(logits,1).cpu().numpy()[0]

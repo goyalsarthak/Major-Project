@@ -163,6 +163,86 @@ if __name__ == "__main__":
     SBF_config = config.pop('saliency_balancing_fusion',OmegaConf.create())
 
     model = instantiate_from_config(model_config)
+    import torch
+    import torch.nn as nn
+    import matplotlib.pyplot as plt
+    from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+    from torchvision.transforms import functional as F
+    from PIL import Image
+    import numpy as np
+
+    # Load pretrained SegFormer model
+    model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
+    feature_extractor = SegformerFeatureExtractor.from_pretrained(model_name)
+    model = SegformerForSemanticSegmentation.from_pretrained(model_name)
+
+    # Modify the decoder for better upsampling
+    class CustomSegformer(nn.Module):
+        def _init_(self, model):
+            super()._init_()
+            self.encoder = model.segformer
+            self.decoder = model.decode_head
+            self.upsample = nn.Sequential(
+                nn.ConvTranspose2d(150, 150, kernel_size=2, stride=2),  # Upsample 2x
+                nn.ReLU(),
+                nn.ConvTranspose2d(150, 150, kernel_size=2, stride=2),  # Upsample 2x
+                nn.ReLU(),
+                nn.ConvTranspose2d(150, 150, kernel_size=2, stride=2),  # Final Upsample
+                nn.ReLU()
+            )
+        
+        def forward(self, pixel_values):
+            encoder_outputs = self.encoder(pixel_values, output_attentions=True)
+            hidden_states = encoder_outputs.hidden_states
+            attentions = encoder_outputs.attentions
+            
+            logits = self.decoder(hidden_states)
+            logits = self.upsample(logits)  # Apply transposed convolutions instead of naive interpolation
+            return logits, attentions
+
+    # Wrap model with custom decoder
+    model = CustomSegformer(model)
+
+    # Load image
+    #image_path = "sample.jpg"  # Change to your image path
+    #image = Image.open(image_path).convert("RGB")
+
+    # Preprocess image
+    #inputs = feature_extractor(images=image, return_tensors="pt")
+
+    # Forward pass
+    # with torch.no_grad():
+        # logits, attentions = custom_model(inputs["pixel_values"])
+
+    # Get segmentation mask
+    # segmentation_map = logits.argmax(dim=1).squeeze().cpu().numpy()
+
+    # Extract attention maps from last layer
+    # attention_map = attentions[-1].squeeze().mean(dim=0).cpu().numpy()
+
+    # # Resize segmentation mask to match original image size
+    # segmentation_map_resized = F.resize(
+    #     torch.tensor(segmentation_map).unsqueeze(0),
+    #     size=image.size[::-1],  # Resize to (height, width)
+    #     interpolation=F.InterpolationMode.NEAREST
+    # ).squeeze().numpy()
+
+    # Plot results
+    # plt.figure(figsize=(10, 5))
+    # plt.subplot(1, 2, 1)
+    # plt.imshow(image)
+    # plt.title("Original Image")
+    # plt.subplot(1, 2, 2)
+    # plt.imshow(segmentation_map_resized, cmap="jet", alpha=0.6)
+    # plt.title("Segmentation Mask (Improved)")
+    # plt.show()
+
+    # # Visualize Attention Map
+    # plt.figure(figsize=(10, 5))
+    # plt.imshow(attention_map, cmap="inferno")
+    # plt.title("Attention Map (Last Layer)")
+    # plt.colorbar()
+    # plt.show()
     if torch.cuda.is_available():
         model=model.cuda()
 

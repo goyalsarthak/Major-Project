@@ -179,8 +179,8 @@ if __name__ == "__main__":
 
     # Modify the decoder for better upsampling
     class CustomSegformer(nn.Module):
-        def _init_(self, model):
-            super()._init_()
+        def __init__(self, model):
+            super().__init___()
             self.encoder = model.segformer
             self.decoder = model.decode_head
             self.upsample = nn.Sequential(

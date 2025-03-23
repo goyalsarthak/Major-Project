@@ -137,6 +137,7 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         
         GLA_img = feature_extractor(images=GLA_img, return_tensors="pt")
         input_var = Variable(GLA_img, requires_grad=True)
+        print("gla shape", GLA_img.shape)
 
         optimizer.zero_grad()
         logits, attentions = model(input_var["pixel_values"])
@@ -145,6 +146,9 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         loss_dict = criterion.get_loss(logits, lbl)
         losses = sum(loss_dict[k] * criterion.weight_dict[k] for k in loss_dict.keys() if k in criterion.weight_dict)
         losses.backward(retain_graph=True)
+
+        print("lla shape", LLA_img.shape)
+        print("label shape", lbl.shape)
 
         # saliency
         # Extract attention maps from last layer

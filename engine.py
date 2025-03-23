@@ -140,8 +140,8 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
 
         optimizer.zero_grad()
         logits, attentions = model(input_var["pixel_values"])
-        print(logits.shape)
-        print(attention_map.shape)
+        print("logits shape from new model",logits.shape)
+        print("attention map shape",attention_map.shape)
         loss_dict = criterion.get_loss(logits, lbl)
         losses = sum(loss_dict[k] * criterion.weight_dict[k] for k in loss_dict.keys() if k in criterion.weight_dict)
         losses.backward(retain_graph=True)

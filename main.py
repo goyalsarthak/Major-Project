@@ -8,6 +8,13 @@ from losses import SetCriterion
 import numpy as np
 import random
 from torch.optim import lr_scheduler
+import torch
+import torch.nn as nn
+import matplotlib.pyplot as plt
+from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+from torchvision.transforms import functional as F
+from PIL import Image
+import numpy as np
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
@@ -163,13 +170,7 @@ if __name__ == "__main__":
     SBF_config = config.pop('saliency_balancing_fusion',OmegaConf.create())
 
     model = instantiate_from_config(model_config)
-    import torch
-    import torch.nn as nn
-    import matplotlib.pyplot as plt
-    from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
-    from torchvision.transforms import functional as F
-    from PIL import Image
-    import numpy as np
+    
 
     # Load pretrained SegFormer model
     model_name = "nvidia/segformer-b0-finetuned-ade-512-512"

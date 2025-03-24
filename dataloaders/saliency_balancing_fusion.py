@@ -60,7 +60,7 @@ def get_SBF_map(gradient, grid_size):
     #Smooth the saliency map
     saliency = F.adaptive_avg_pool2d(gradient, grid_size)
     saliency = F.conv_transpose2d(saliency, bs_kernel, padding=bs_pad, stride=h // grid_size)
-    saliency = F.interpolate(saliency, size=(h, w), mode='bilinear', align_corners=True)
+    saliency = F.interpolate(saliency, size=(192, 192), mode='bilinear', align_corners=True)
 
     #Normalize the saliency map
     saliency = rescale_intensity(saliency)

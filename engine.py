@@ -21,6 +21,7 @@ print = functools.partial(print, flush=True)
 
 model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
 processor = SegformerImageProcessor.from_pretrained(model_name)
+
 def preprocess_images(images, processor, device): 
     # print(images.shape, "################$#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$", images.dtype,"\n\n")
     images = (images - images.min()) / (images.max() - images.min())
@@ -35,6 +36,7 @@ def preprocess_images(images, processor, device):
     resized_tensor = F.interpolate(images, size=(512, 512), mode='bicubic', align_corners=False)
     # processed_images = processor(images, return_tensors='pt', do_rescale = False, size = (512, 512)).to(device)
     return resized_tensor
+
 def train_warm_up(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, learning_rate:float, warmup_iteration: int = 1500):
@@ -154,16 +156,19 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         # model.config.output_attentions = True
 
         optimizer.zero_grad()
-        logits, attention_maps = model(input_var)
+        output = model(input_var, output_attentions=True)
+        logits, attention_maps = output.logits, output.attentions
+        print(logits.shape, "logits shape")
+        logits = F.interpolate(logits, size=lbl.shape[-2:], mode="bicubic", align_corners=False)
         # logits = output.logits
         # attention_maps = output.attentions
-        # print(lbl.shape,"$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%&&&&&&&")
-        lbl = lbl.unsqueeze(1)  # Add a channel dimension
-        lbl = F.interpolate(lbl.float(), size=((48, 48)), mode='nearest')
+        print(lbl.shape,"label shape")
+        # lbl = lbl.unsqueeze(1)  # Add a channel dimension
+        # lbl = F.interpolate(lbl.float(), size=((48, 48)), mode='nearest')
         # lbl = lbl.float()  # Convert to float if necessary
         # lbl = F.interpolate(lbl, size=((48, 48)), mode='nearest')
 # Remove the channel dimension (squeeze) and convert to long
-        lbl = lbl.squeeze(1).long() 
+        # lbl = lbl.squeeze(1).long() 
         # print(lbl.shape,"$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%&&&&&&&")
         loss_dict = criterion.get_loss(logits, lbl)
         losses = sum(loss_dict[k] * criterion.weight_dict[k] for k in loss_dict.keys() if k in criterion.weight_dict)
@@ -179,7 +184,9 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         # print(attention_map.shape)
         # print(attention_maps[-2].shape)
         # print(GLA_img.shape)
-        gradient = torch.mean(attention_map.unsqueeze(1), dim=1)  # Average across attention heads
+        gradient = torch.mean(attention_map.unsqueeze(1), dim=1)
+        print("gradient shape : ", gradient.shape)
+          # Average across attention heads
         # attention_map = torch.nn.functional.interpolate(
         #     attention_map.unsqueeze(1), size=(GLA_img.shape[2], GLA_img.shape[3]), mode='bilinear', align_corners=False
         # ).squeeze()
@@ -187,21 +194,24 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         # gradient = torch.sqrt(torch.mean(attention_maps ** 2, dim=1, keepdim=True)).detach()
 
         saliency = get_SBF_map(gradient,config.grid_size)
-
+        print("saliency shape ",saliency.shape)
         if visual_dict is not None:
             visual_dict['GLA_pred']=torch.argmax(logits,1).cpu().numpy()[0]
 
         if visual_dict is not None:
             visual_dict['GLA_saliency']= saliency.detach().cpu().numpy()[0,0]
 
+        
         mixed_img = GLA_img.detach() * saliency + LLA_img * (1 - saliency)
+
         if visual_dict is not None:
             visual_dict['SBF']= mixed_img.detach().cpu().numpy()[0,0]
 
         aug_var = Variable(mixed_img, requires_grad=True)
         aug_var = preprocess_images(aug_var,processor,device)
-        aug_logits , _ = model(aug_var)
-        aug_logits = aug_logits.logits
+        aug_output  = model(aug_var)
+        aug_logits = aug_output.logits
+        aug_logits = F.interpolate(aug_logits, size=lbl.shape[-2:], mode="bicubic", align_corners=False)
         aug_loss_dict = criterion.get_loss(aug_logits, lbl)
         aug_losses = sum(aug_loss_dict[k] * criterion.weight_dict[k] for k in aug_loss_dict.keys() if k in criterion.weight_dict)
 

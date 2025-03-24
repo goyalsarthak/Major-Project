@@ -174,48 +174,53 @@ if __name__ == "__main__":
 
     processor = SegformerImageProcessor.from_pretrained(model_name)
     model = SegformerForSemanticSegmentation.from_pretrained(model_name, num_labels=5, ignore_mismatched_sizes=True)
-    # if torch.cuda.is_available():
-    #     model=model.cuda()
+    if torch.cuda.is_available():
+        model=model.cuda()
 
-    # Modify the decoder for better upsampling
     class CustomSegformer(nn.Module):
         def __init__(self, model):
-            super(CustomSegformer,self).__init__()
-            # Upsampling Layers (196 → 256 → 384 → 512)
-            self.upsample1 = nn.ConvTranspose2d(1, 32, kernel_size=3, stride=2, padding=1, output_padding=1)  # 196 → 256
-            self.upsample2 = nn.ConvTranspose2d(32, 64, kernel_size=3, stride=2, padding=1, output_padding=1)  # 256 → 384
-            self.upsample3 = nn.ConvTranspose2d(64, 128, kernel_size=3, stride=2, padding=1, output_padding=1)  # 384 → 512
-            self.conv1x1 = nn.Conv2d(128, 3, kernel_size=1)  # Convert 128 channels → 3 (RGB)
-            self.encoder = model.segformer
-            self.decoder = model.decode_head
-            self.upsample = nn.Sequential(
-                nn.ConvTranspose2d(150, 150, kernel_size=2, stride=2),  # Upsample 2x
-                nn.ReLU(),
-                nn.ConvTranspose2d(150, 150, kernel_size=2, stride=2),  # Upsample 2x
-                nn.ReLU(),
-                nn.ConvTranspose2d(150, 150, kernel_size=2, stride=2),  # Final Upsample
-                nn.ReLU()
-            )
-        
-        def forward(self, x):
-            # Upsample grayscale image
-            x = self.upsample1(x)
-            x = nn.ReLU()(x)
-            x = self.upsample2(x)
-            x = nn.ReLU()(x)
-            x = self.upsample3(x)
-            x = nn.ReLU()(x)
-            x = self.conv1x1(x)
-            encoder_outputs = self.encoder(x, output_attentions=True)
-            hidden_states = encoder_outputs.hidden_states
-            attentions = encoder_outputs.attentions
+            super(CustomSegformer, self).__init__()
+            self.encoder = model.segformer  # Extract encoder
+            self.num_classes = model.config.num_labels  # Number of segmentation classes
+
+            # Decoder: Fuse multi-scale features (SegFormer has 4 feature maps)
+            self.decoder_layers = nn.ModuleList([
+                nn.Conv2d(32, 128, kernel_size=3, padding=1),
+                nn.Conv2d(64, 128, kernel_size=3, padding=1),
+                nn.Conv2d(160, 128, kernel_size=3, padding=1),
+                nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            ])
             
-            logits = self.decoder(hidden_states)
-            logits = self.upsample(logits)  # Apply transposed convolutions instead of naive interpolation
-            return logits, attentions
+            # Final segmentation head
+            self.segmentation_head = nn.Sequential(
+                nn.Conv2d(128, 128, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(128, self.num_classes, kernel_size=1)  # Output logits for each class
+            )
+
+        def forward(self, x):
+            # Get multi-scale feature maps from the encoder
+            encoder_outputs = self.encoder(x, output_attentions=False)
+            hidden_states = encoder_outputs.hidden_states  # List of 4 feature maps
+
+            # Upsample and fuse multi-scale feature maps
+            fused_features = 0
+            for i, decoder_layer in enumerate(self.decoder_layers):
+                upsampled_feature = F.interpolate(hidden_states[i], scale_factor=2**(3-i), mode="bilinear", align_corners=False)
+                fused_features += decoder_layer(upsampled_feature)
+
+            # Final segmentation map
+            logits = self.segmentation_head(fused_features)
+
+            return logits
+
+    # Load pre-trained SegFormer and wrap it
+    # pretrained_model = SegformerForSemanticSegmentation.from_pretrained("nvidia/mit-b0", num_labels=150)
+    # model = CustomSegformer(pretrained_model)
+
 
     # Wrap model with custom decoder
-    model = CustomSegformer(model)
+    # model = CustomSegformer(model)
 
     # Load image
     #image_path = "sample.jpg"  # Change to your image path
@@ -257,8 +262,8 @@ if __name__ == "__main__":
     # plt.title("Attention Map (Last Layer)")
     # plt.colorbar()
     # plt.show()
-    if torch.cuda.is_available():
-        model=model.cuda()
+    # if torch.cuda.is_available():
+    #     model=model.cuda()
 
     if getattr(model_config.params, 'base_learning_rate') :
         bs, base_lr = config.data.params.batch_size, optimizer_config.base_learning_rate

@@ -1,20 +1,18 @@
 import argparse, os, sys, datetime, importlib
 os.environ['KMP_DUPLICATE_LIB_OK']='true'
+import torch
+import torch.nn as nn
+from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor, SegformerConfig
 import torch.optim
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from engine import train_warm_up,evaluate,train_one_epoch_SBF,train_one_epoch,prediction_wrapper
 from losses import SetCriterion
+from torchvision.transforms import functional as F
 import numpy as np
+from PIL import Image
 import random
 from torch.optim import lr_scheduler
-import torch
-import torch.nn as nn
-import matplotlib.pyplot as plt
-from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
-from torchvision.transforms import functional as F
-from PIL import Image
-import numpy as np
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
@@ -172,10 +170,12 @@ if __name__ == "__main__":
     # model = instantiate_from_config(model_config)
     
 
-    # Load pretrained SegFormer model
     model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
-    feature_extractor = SegformerFeatureExtractor.from_pretrained(model_name)
-    model = SegformerForSemanticSegmentation.from_pretrained(model_name)
+
+    processor = SegformerImageProcessor.from_pretrained(model_name)
+    model = SegformerForSemanticSegmentation.from_pretrained(model_name, num_labels=5, ignore_mismatched_sizes=True)
+    # if torch.cuda.is_available():
+    #     model=model.cuda()
 
     # Modify the decoder for better upsampling
     class CustomSegformer(nn.Module):

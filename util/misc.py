@@ -1,5 +1,5 @@
 import time
-from collections.abc import defaultdict, deque
+from collections import defaultdict, deque
 import datetime
 import functools
 print = functools.partial(print, flush=True)

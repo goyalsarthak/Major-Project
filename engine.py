@@ -22,6 +22,7 @@ print = functools.partial(print, flush=True)
 model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
 processor = SegformerImageProcessor.from_pretrained(model_name)
 
+
 def preprocess_images(images, processor, device): 
     # print(images.shape, "################$#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$", images.dtype,"\n\n")
     images = (images - images.min()) / (images.max() - images.min())
@@ -121,6 +122,43 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     return cur_iteration
 
 
+def aggregate_attention_maps(attention_maps, target_size=(192, 192), eps=1e-6):
+    """
+    Aggregates attention maps from a transformer-based model (like SegFormer) into a single-channel attention map.
+    
+    Args:
+        attention_maps (list of tensors): List of attention tensors from different layers.
+                                          Each tensor is of shape (batch_size, num_heads, H, W).
+        target_size (tuple): The desired spatial size for attention maps before aggregation.
+        eps (float): Small value to prevent division by zero during normalization.
+
+    Returns:
+        torch.Tensor: Single-channel aggregated attention map of shape (batch_size, 1, target_size[0], target_size[1]).
+    """
+
+    # Resize each attention map to the target size
+    resized_attentions = [F.interpolate(attn, size=target_size, mode='bilinear', align_corners=False) 
+                          for attn in attention_maps]
+
+    # Stack along a new dimension (num_layers, batch_size, num_heads, H, W)
+    stacked_attentions = torch.stack(resized_attentions, dim=0)
+
+    # Average across heads -> Shape: (num_layers, batch_size, 1, H, W)
+    mean_head_attention = torch.mean(stacked_attentions, dim=2, keepdim=True)
+
+    # Average across layers -> Shape: (batch_size, 1, H, W)
+    combined_attention = torch.mean(mean_head_attention, dim=0)
+
+    # Normalize to [0,1] range
+    min_val, max_val = combined_attention.min(), combined_attention.max()
+    normalized_attention = (combined_attention - min_val) / (max_val - min_val + eps)
+
+    return normalized_attention
+
+# Example usage:
+# attention_maps = [Tensor of shape (batch_size, num_heads, H, W) for each layer]
+# aggregated_attention = aggregate_attention_maps(attention_maps)
+
 
 def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -180,20 +218,21 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         # attention_map = attention_maps.mean(dim=1)
         # Normalize the attention map to a [0, 1] range
         # gradient = torch.sqrt(torch.mean(attention_maps ** 2, dim=1, keepdim=True)).detach()
-        attention_map = attention_maps[-1]
+        # attention_map = attention_maps[-1]
         # print(attention_map.shape)
         # print(attention_maps[-2].shape)
         # print(GLA_img.shape)
-        gradient = torch.mean(attention_map.unsqueeze(1), dim=1)
-        print("gradient shape : ", gradient.shape)
+        # gradient = torch.mean(attention_map.unsqueeze(1), dim=1)
+        # print("gradient shape : ", gradient.shape)
           # Average across attention heads
         # attention_map = torch.nn.functional.interpolate(
         #     attention_map.unsqueeze(1), size=(GLA_img.shape[2], GLA_img.shape[3]), mode='bilinear', align_corners=False
         # ).squeeze()
         # saliency
         # gradient = torch.sqrt(torch.mean(attention_maps ** 2, dim=1, keepdim=True)).detach()
-
-        saliency = get_SBF_map(gradient,config.grid_size)
+        print("attention mapS :",attention_maps.shape)
+        saliency=aggregate_attention_maps(attention_maps)
+        # saliency = get_SBF_map(gradient,config.grid_size)
         print("saliency shape ",saliency.shape)
         if visual_dict is not None:
             visual_dict['GLA_pred']=torch.argmax(logits,1).cpu().numpy()[0]

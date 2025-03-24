@@ -242,7 +242,7 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         # ).squeeze()
         # saliency
         # gradient = torch.sqrt(torch.mean(attention_maps ** 2, dim=1, keepdim=True)).detach()
-        print("attention mapS :",attention_maps.shape)
+        # print("attention mapS :",attention_maps.shape)
         saliency=aggregate_attention_maps(attention_maps)
         # saliency = get_SBF_map(gradient,config.grid_size)
         print("saliency shape ",saliency.shape)

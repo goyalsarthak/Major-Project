@@ -206,7 +206,7 @@ if __name__ == "__main__":
             x = self.upsample3(x)
             x = nn.ReLU()(x)
             x = self.conv1x1(x)
-            encoder_outputs = self.encoder(pixel_values, output_attentions=True)
+            encoder_outputs = self.encoder(x, output_attentions=True)
             hidden_states = encoder_outputs.hidden_states
             attentions = encoder_outputs.attentions
             

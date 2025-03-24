@@ -122,7 +122,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     print("Averaged stats:", metric_logger)
     return cur_iteration
 
-def aggregate_attention_maps(attention_maps, target_size=(512, 512)):
+def aggregate_attention_maps(attention_maps):
     """
     Extract and process attention maps from SegFormer, preserving batch size.
     
@@ -133,29 +133,13 @@ def aggregate_attention_maps(attention_maps, target_size=(512, 512)):
     Returns:
         torch.Tensor: Normalized attention maps of shape [batch_size, 1, 512, 512]
     """
-    # Take the last layer's attention maps
-    last_layer_attn = attention_maps[-1]
-    
-    # Shape: [batch_size, num_heads, sequence_length, sequence_length]
-    batch_size, num_heads, seq_len, _ = last_layer_attn.shape
-    
-    # Average across attention heads
-    avg_attn = last_layer_attn.mean(dim=1)  # Now [batch_size, seq_len, seq_len]
-    
-    # Compute side length (assuming square attention map)
-    side_length = int(seq_len ** 0.5)
-    
-    # Reshape to 2D spatial representation for each sample in batch
-    attn_spatial = avg_attn.view(batch_size, side_length, side_length)
-    
+    attention_map = attention_maps[-1]
+    attention_map=torch.mean(attention_map.unsqueeze(1), dim=1)
+    attention_map = torch.mean(attention_map, dim=1)  # Shape: (32, 256, 256)
     # Resize to target size for each sample in batch
-    resized_attn = F.interpolate(
-        attn_spatial.unsqueeze(1),  # Add channel dimension
-        size=target_size, 
-        mode='bilinear', 
-        align_corners=False
-    )
-    
+
+    resized_attn = F.interpolate(attention_map.unsqueeze(1), size=(192, 192), mode='bilinear', align_corners=False)
+
     # Normalize to [0, 1] range for each sample
     min_vals = resized_attn.amin(dim=[2, 3], keepdim=True)
     max_vals = resized_attn.amax(dim=[2, 3], keepdim=True)

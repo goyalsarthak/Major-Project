@@ -154,9 +154,9 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         # model.config.output_attentions = True
 
         optimizer.zero_grad()
-        output = model(input_var,output_attentions=True)
-        logits = output.logits
-        attention_maps = output.attentions
+        logits, attention_maps = model(input_var)
+        # logits = output.logits
+        # attention_maps = output.attentions
         # print(lbl.shape,"$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%&&&&&&&")
         lbl = lbl.unsqueeze(1)  # Add a channel dimension
         lbl = F.interpolate(lbl.float(), size=((48, 48)), mode='nearest')
@@ -200,7 +200,7 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
 
         aug_var = Variable(mixed_img, requires_grad=True)
         aug_var = preprocess_images(aug_var,processor,device)
-        aug_logits = model(aug_var)
+        aug_logits , _ = model(aug_var)
         aug_logits = aug_logits.logits
         aug_loss_dict = criterion.get_loss(aug_logits, lbl)
         aug_losses = sum(aug_loss_dict[k] * criterion.weight_dict[k] for k in aug_loss_dict.keys() if k in criterion.weight_dict)

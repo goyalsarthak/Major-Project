@@ -197,7 +197,7 @@ if __name__ == "__main__":
                 nn.ReLU()
             )
         
-        def forward(self, pixel_values):
+        def forward(self, x):
             # Upsample grayscale image
             x = self.upsample1(x)
             x = nn.ReLU()(x)

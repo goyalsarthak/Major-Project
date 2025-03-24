@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
-from torchvision.transforms import functional as F
+# from torchvision.transforms import functional as F
 from PIL import Image
 import numpy as np
 print = functools.partial(print, flush=True)

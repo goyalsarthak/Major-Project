@@ -122,45 +122,97 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     print("Averaged stats:", metric_logger)
     return cur_iteration
 
+# import torch
+# import torch.nn.functional as F
+# import math
 
-def aggregate_attention_maps(attention_maps, target_size=(192, 192), weight_decay=0.9, eps=1e-20):
+def aggregate_attention_maps(attention_maps, target_size=(192, 192), weight_decay=0.9, eps=1e-8):
     """
-    Aggregates attention maps from SegFormer into a single-channel attention map.
+    Advanced attention map aggregation for SegFormer with robust handling of attention dimensions.
 
     Args:
-        attention_maps (tuple of tensors): Tuple of attention tensors from different layers.
-                                           Each tensor is of shape (batch_size, num_heads, seq_len, seq_len).
-        target_size (tuple): The target spatial size for the attention maps.
-        weight_decay (float): Exponential decay factor for layer-wise aggregation (later layers weighted higher).
-        eps (float): Small value to prevent division by zero in normalization.
+        attention_maps (tuple): Attention tensors from different layers of shape 
+                                (batch_size, num_heads, sequence_length, sequence_length)
+        target_size (tuple): Desired output spatial dimensions
+        weight_decay (float): Decay factor for layer importance
+        eps (float): Small epsilon for numerical stability
 
     Returns:
-        torch.Tensor: Single-channel aggregated attention map of shape (batch_size, 1, target_size[0], target_size[1]).
+        torch.Tensor: Aggregated and normalized attention map
     """
     num_layers = len(attention_maps)
     batch_size, num_heads, seq_len, _ = attention_maps[0].shape
     spatial_size = int(math.sqrt(seq_len))  # Assuming square spatial attention
 
-    # Convert sequence attention maps to spatial form and resize
+    # New approach: Focus on self-attention and relevance
     resized_attentions = []
     for i, attn in enumerate(attention_maps):
-        attn = attn.mean(dim=2)  # Average over sequence tokens to get (batch_size, num_heads, seq_len)
-        attn = attn.view(batch_size, num_heads, spatial_size, spatial_size)  # Reshape to (H', W')
-        attn = F.interpolate(attn, size=target_size, mode='bicubic', align_corners=False)  # Resize
-        weight = weight_decay ** (num_layers - i - 1)  # Exponential weighting (later layers weighted higher)
-        resized_attentions.append(attn * weight)
+        # Compute self-attention relevance (diagonal elements)
+        self_attn = torch.diagonal(attn, dim1=-2, dim2=-1)
+        
+        # Reshape to spatial dimensions
+        self_attn = self_attn.view(batch_size, num_heads, spatial_size, spatial_size)
+        
+        # Resize to target size
+        resized_attn = F.interpolate(
+            self_attn, 
+            size=target_size, 
+            mode='bilinear', 
+            align_corners=False
+        )
+        
+        # Apply layer-wise weighting
+        weight = weight_decay ** (num_layers - i - 1)
+        resized_attentions.append(resized_attn * weight)
 
-    # Stack along layers and compute mean across layers
-    stacked_attentions = torch.stack(resized_attentions, dim=0)  # (num_layers, batch_size, num_heads, H, W)
-    mean_head_attention = torch.mean(stacked_attentions, dim=2)  # Average over heads → (num_layers, batch_size, 1, H, W)
-    combined_attention = torch.mean(mean_head_attention, dim=0)  # Average over layers → (batch_size, 1, H, W)
+    # Aggregate across layers and heads
+    stacked_attentions = torch.stack(resized_attentions, dim=0)
+    aggregated_attention = torch.mean(stacked_attentions, dim=[0, 2])  # Average over layers and heads
+    
+    # Normalize to [0, 1] range
+    min_val = aggregated_attention.min(dim=-1, keepdim=True)[0].min(dim=-2, keepdim=True)[0]
+    max_val = aggregated_attention.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0]
+    normalized_attention = (aggregated_attention - min_val) / (max_val - min_val + eps)
 
-    # Normalize attention maps for stability
-    min_val, max_val = combined_attention.min(dim=-1, keepdim=True)[0].min(dim=-2, keepdim=True)[0], \
-                       combined_attention.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0]
-    normalized_attention = (combined_attention - min_val) / (max_val - min_val + eps)
+    return normalized_attention.unsqueeze(1)  # Add channel dimension
+# def aggregate_attention_maps(attention_maps, target_size=(192, 192), weight_decay=0.9, eps=1e-20):
+#     """
+#     Aggregates attention maps from SegFormer into a single-channel attention map.
 
-    return normalized_attention
+#     Args:
+#         attention_maps (tuple of tensors): Tuple of attention tensors from different layers.
+#                                            Each tensor is of shape (batch_size, num_heads, seq_len, seq_len).
+#         target_size (tuple): The target spatial size for the attention maps.
+#         weight_decay (float): Exponential decay factor for layer-wise aggregation (later layers weighted higher).
+#         eps (float): Small value to prevent division by zero in normalization.
+
+#     Returns:
+#         torch.Tensor: Single-channel aggregated attention map of shape (batch_size, 1, target_size[0], target_size[1]).
+#     """
+#     num_layers = len(attention_maps)
+#     batch_size, num_heads, seq_len, _ = attention_maps[0].shape
+#     spatial_size = int(math.sqrt(seq_len))  # Assuming square spatial attention
+
+#     # Convert sequence attention maps to spatial form and resize
+#     resized_attentions = []
+#     for i, attn in enumerate(attention_maps):
+#         attn = attn.mean(dim=2)  # Average over sequence tokens to get (batch_size, num_heads, seq_len)
+#         attn = attn.view(batch_size, num_heads, spatial_size, spatial_size)  # Reshape to (H', W')
+#         attn = F.interpolate(attn, size=target_size, mode='bicubic', align_corners=False)  # Resize
+#         weight = weight_decay ** (num_layers - i - 1)  # Exponential weighting (later layers weighted higher)
+#         resized_attentions.append(attn * weight)
+
+#     # Stack along layers and compute mean across layers
+#     stacked_attentions = torch.stack(resized_attentions, dim=0)  # (num_layers, batch_size, num_heads, H, W)
+#     mean_head_attention = torch.mean(stacked_attentions, dim=2)  # Average over heads → (num_layers, batch_size, 1, H, W)
+#     combined_attention = torch.mean(mean_head_attention, dim=0)  # Average over layers → (batch_size, 1, H, W)
+
+#     # Normalize attention maps for stability
+#     min_val, max_val = combined_attention.min(dim=-1, keepdim=True)[0].min(dim=-2, keepdim=True)[0], \
+#                        combined_attention.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0]
+#     normalized_attention = (combined_attention - min_val) / (max_val - min_val + eps)
+
+#     return normalized_attention
 
 # Example usage:
 # attention_maps = (Tensor of shape (batch_size, num_heads, seq_len, seq_len) for each layer)

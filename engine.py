@@ -123,7 +123,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     return cur_iteration
 
 
-def aggregate_attention_maps(attention_maps, target_size=(192, 192), weight_decay=0.9, eps=1e-6):
+def aggregate_attention_maps(attention_maps, target_size=(192, 192), weight_decay=0.9, eps=1e-20):
     """
     Aggregates attention maps from SegFormer into a single-channel attention map.
 

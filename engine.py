@@ -13,14 +13,14 @@ from dataloaders.saliency_balancing_fusion import get_SBF_map
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
 from torchvision.transforms import functional as F
 from PIL import Image
 import numpy as np
 print = functools.partial(print, flush=True)
 
 model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
-feature_extractor = SegformerFeatureExtractor.from_pretrained(model_name)
+feature_extractor = SegformerImageProcessor.from_pretrained(model_name)
 
 def train_warm_up(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,

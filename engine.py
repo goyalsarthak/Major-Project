@@ -122,73 +122,46 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     print("Averaged stats:", metric_logger)
     return cur_iteration
 
-# import torch
-# import torch.nn.functional as F
-# import math
-def aggregate_attention_maps(attention_maps, target_size=(192, 192), weight_decay=0.9, eps=1e-8):
+def aggregate_attention_maps(attention_maps, target_size=(512, 512)):
     """
-    Robust attention map aggregation for SegFormer with comprehensive error handling.
-
+    Extract and process attention maps from SegFormer, preserving batch size.
+    
     Args:
-        attention_maps (tuple/list): Attention tensors from different layers
-        target_size (tuple): Desired output spatial dimensions
-        weight_decay (float): Decay factor for layer importance
-        eps (float): Small epsilon for numerical stability
-
+        attention_maps (tuple): Tuple of attention tensors from SegFormer
+        target_size (tuple): Desired output size for attention map
+    
     Returns:
-        torch.Tensor: Aggregated and normalized attention map
+        torch.Tensor: Normalized attention maps of shape [batch_size, 1, 512, 512]
     """
-    # Comprehensive input validation
-    if not attention_maps or not isinstance(attention_maps, (tuple, list)):
-        raise ValueError("Invalid attention maps input")
-
-    # New approach to handle various attention map formats
-    processed_attentions = []
-    for layer_attn in attention_maps:
-        # Robust handling of different attention tensor shapes
-        if layer_attn.dim() == 4:  # [batch, heads, seq_len, seq_len]
-            # Average across attention heads
-            layer_attn = layer_attn.mean(dim=1)  # Now [batch, seq_len, seq_len]
-        
-        # Compute sequence length and spatial dimension
-        B, seq_len, _ = layer_attn.shape
-        spatial_size = int(math.sqrt(seq_len))
-        
-        try:
-            # Reshape to spatial dimensions
-            spatial_attn = layer_attn.view(B, spatial_size, spatial_size)
-            
-            # Resize to target size
-            resized_attn = F.interpolate(
-                spatial_attn.unsqueeze(1),  # Add channel dimension
-                size=target_size, 
-                mode='bilinear', 
-                align_corners=False
-            ).squeeze(1)
-            
-            processed_attentions.append(resized_attn)
-        
-        except Exception as e:
-            print(f"Error processing attention map: {e}")
-            print(f"Current attention map shape: {layer_attn.shape}")
-            raise
-
-    # Aggregate processed attention maps
-    if not processed_attentions:
-        raise ValueError("No valid attention maps could be processed")
-
-    # Stack and average attention maps
-    stacked_attentions = torch.stack(processed_attentions, dim=0)
-    aggregated_attention = torch.mean(stacked_attentions, dim=0)
-
-    # Advanced normalization
-    min_val = aggregated_attention.min()
-    max_val = aggregated_attention.max()
-    normalized_attention = (aggregated_attention - min_val) / (max_val - min_val + eps)
-
-    # Ensure final shape is [1, 1, target_height, target_width]
-    return normalized_attention.unsqueeze(0).unsqueeze(0)
-
+    # Take the last layer's attention maps
+    last_layer_attn = attention_maps[-1]
+    
+    # Shape: [batch_size, num_heads, sequence_length, sequence_length]
+    batch_size, num_heads, seq_len, _ = last_layer_attn.shape
+    
+    # Average across attention heads
+    avg_attn = last_layer_attn.mean(dim=1)  # Now [batch_size, seq_len, seq_len]
+    
+    # Compute side length (assuming square attention map)
+    side_length = int(seq_len ** 0.5)
+    
+    # Reshape to 2D spatial representation for each sample in batch
+    attn_spatial = avg_attn.view(batch_size, side_length, side_length)
+    
+    # Resize to target size for each sample in batch
+    resized_attn = F.interpolate(
+        attn_spatial.unsqueeze(1),  # Add channel dimension
+        size=target_size, 
+        mode='bilinear', 
+        align_corners=False
+    )
+    
+    # Normalize to [0, 1] range for each sample
+    min_vals = resized_attn.amin(dim=[2, 3], keepdim=True)
+    max_vals = resized_attn.amax(dim=[2, 3], keepdim=True)
+    normalized_attn = (resized_attn - min_vals) / (max_vals - min_vals + 1e-8)
+    
+    return normalized_attn
 
 # def aggregate_attention_maps(attention_maps, target_size=(192, 192), weight_decay=0.9, eps=1e-20):
 #     """

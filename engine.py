@@ -183,11 +183,11 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         optimizer.zero_grad()
         output = model(input_var, output_attentions=True)
         logits, attention_maps = output.logits, output.attentions
-        print(logits.shape, "logits shape")
+        # print(logits.shape, "logits shape")
         logits = F.interpolate(logits, size=lbl.shape[-2:], mode="bicubic", align_corners=False)
         # logits = output.logits
         # attention_maps = output.attentions
-        print(lbl.shape,"label shape")
+        # print(lbl.shape,"label shape")
         # lbl = lbl.unsqueeze(1)  # Add a channel dimension
         # lbl = F.interpolate(lbl.float(), size=((48, 48)), mode='nearest')
         # lbl = lbl.float()  # Convert to float if necessary

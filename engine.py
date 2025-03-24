@@ -21,7 +21,20 @@ print = functools.partial(print, flush=True)
 
 model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
 feature_extractor = SegformerImageProcessor.from_pretrained(model_name)
-
+def preprocess_images(images, processor, device): 
+    # print(images.shape, "################$#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$", images.dtype,"\n\n")
+    images = (images - images.min()) / (images.max() - images.min())
+    images = images.clamp(0.0, 1.0)
+    images = images.to(torch.float32)
+    images = images.repeat(1, 3, 1, 1)
+    # images = images.permute(0, 2, 3, 1).detach().cpu().numpy()
+    # images = torch.from_numpy(images).to(device)
+#     # Use SegformerImageProcessor to normalize, resize, and process the images
+#     # It will automatically handle normalization, resizing, and converting to tensors
+    # print(images.shape, "################$#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$", images.dtype,"\n\n")
+    resized_tensor = F.interpolate(images, size=(512, 512), mode='bicubic', align_corners=False)
+    # processed_images = processor(images, return_tensors='pt', do_rescale = False, size = (512, 512)).to(device)
+    return resized_tensor
 def train_warm_up(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, learning_rate:float, warmup_iteration: int = 1500):

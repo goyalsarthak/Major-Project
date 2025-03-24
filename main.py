@@ -181,6 +181,11 @@ if __name__ == "__main__":
     class CustomSegformer(nn.Module):
         def __init__(self, model):
             super(CustomSegformer,self).__init__()
+            # Upsampling Layers (196 → 256 → 384 → 512)
+            self.upsample1 = nn.ConvTranspose2d(1, 32, kernel_size=3, stride=2, padding=1, output_padding=1)  # 196 → 256
+            self.upsample2 = nn.ConvTranspose2d(32, 64, kernel_size=3, stride=2, padding=1, output_padding=1)  # 256 → 384
+            self.upsample3 = nn.ConvTranspose2d(64, 128, kernel_size=3, stride=2, padding=1, output_padding=1)  # 384 → 512
+            self.conv1x1 = nn.Conv2d(128, 3, kernel_size=1)  # Convert 128 channels → 3 (RGB)
             self.encoder = model.segformer
             self.decoder = model.decode_head
             self.upsample = nn.Sequential(
@@ -193,6 +198,14 @@ if __name__ == "__main__":
             )
         
         def forward(self, pixel_values):
+            # Upsample grayscale image
+            x = self.upsample1(x)
+            x = nn.ReLU()(x)
+            x = self.upsample2(x)
+            x = nn.ReLU()(x)
+            x = self.upsample3(x)
+            x = nn.ReLU()(x)
+            x = self.conv1x1(x)
             encoder_outputs = self.encoder(pixel_values, output_attentions=True)
             hidden_states = encoder_outputs.hidden_states
             attentions = encoder_outputs.attentions

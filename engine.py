@@ -220,7 +220,7 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         # print("attention mapS :",attention_maps.shape)
         saliency=aggregate_attention_maps(attention_maps)
         # saliency = get_SBF_map(gradient,config.grid_size)
-        print("saliency shape ",saliency.shape)
+        # print("saliency shape ",saliency.shape)
         if visual_dict is not None:
             visual_dict['GLA_pred']=torch.argmax(logits,1).cpu().numpy()[0]
 

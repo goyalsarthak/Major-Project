@@ -20,7 +20,7 @@ import numpy as np
 print = functools.partial(print, flush=True)
 
 model_name = "nvidia/segformer-b0-finetuned-ade-512-512"
-feature_extractor = SegformerImageProcessor.from_pretrained(model_name)
+processor = SegformerImageProcessor.from_pretrained(model_name)
 def preprocess_images(images, processor, device): 
     # print(images.shape, "################$#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$", images.dtype,"\n\n")
     images = (images - images.min()) / (images.max() - images.min())
@@ -147,29 +147,46 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
             visual_dict['GT']=lbl.detach().cpu().numpy()[0]
         else:
             visual_dict=None
-        
-        GLA_img = feature_extractor(images=GLA_img, return_tensors="pt")
+
+        lbl = lbl.to(device)
         input_var = Variable(GLA_img, requires_grad=True)
-        print("gla shape", GLA_img.shape)
+        input_var = preprocess_images(input_var, processor, device)
+        # model.config.output_attentions = True
 
         optimizer.zero_grad()
-        logits, attentions = model(input_var["pixel_values"])
-        print("logits shape from new model",logits.shape)
-        print("attention map shape",attention_map.shape)
+        output = model(input_var,output_attentions=True)
+        logits = output.logits
+        attention_maps = output.attentions
+        # print(lbl.shape,"$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%&&&&&&&")
+        lbl = lbl.unsqueeze(1)  # Add a channel dimension
+        lbl = F.interpolate(lbl.float(), size=((48, 48)), mode='nearest')
+        # lbl = lbl.float()  # Convert to float if necessary
+        # lbl = F.interpolate(lbl, size=((48, 48)), mode='nearest')
+# Remove the channel dimension (squeeze) and convert to long
+        lbl = lbl.squeeze(1).long() 
+        # print(lbl.shape,"$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%&&&&&&&")
         loss_dict = criterion.get_loss(logits, lbl)
         losses = sum(loss_dict[k] * criterion.weight_dict[k] for k in loss_dict.keys() if k in criterion.weight_dict)
         losses.backward(retain_graph=True)
-
-        print("lla shape", LLA_img.shape)
-        print("label shape", lbl.shape)
-
+        # if isinstance(attention_maps, tuple):
+        #   attention_maps = torch.stack(attention_maps, dim=0)  # Stack into a tensor
+        #   attention_map = attention_maps.mean(dim=1)
+        # print(attention_maps.shape)
+        # attention_map = attention_maps.mean(dim=1)
+        # Normalize the attention map to a [0, 1] range
+        # gradient = torch.sqrt(torch.mean(attention_maps ** 2, dim=1, keepdim=True)).detach()
+        attention_map = attention_maps[-1]
+        # print(attention_map.shape)
+        # print(attention_maps[-2].shape)
+        # print(GLA_img.shape)
+        gradient = torch.mean(attention_map.unsqueeze(1), dim=1)  # Average across attention heads
+        # attention_map = torch.nn.functional.interpolate(
+        #     attention_map.unsqueeze(1), size=(GLA_img.shape[2], GLA_img.shape[3]), mode='bilinear', align_corners=False
+        # ).squeeze()
         # saliency
-        # Extract attention maps from last layer
-        attention_map = attentions[-1].squeeze().mean(dim=0).cpu().numpy()
+        # gradient = torch.sqrt(torch.mean(attention_maps ** 2, dim=1, keepdim=True)).detach()
 
-        # gradient = torch.sqrt(torch.mean(input_var.grad ** 2, dim=1, keepdim=True)).detach()
-
-        saliency=get_SBF_map(attention_map,config.grid_size)
+        saliency = get_SBF_map(gradient,config.grid_size)
 
         if visual_dict is not None:
             visual_dict['GLA_pred']=torch.argmax(logits,1).cpu().numpy()[0]
@@ -182,7 +199,9 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
             visual_dict['SBF']= mixed_img.detach().cpu().numpy()[0,0]
 
         aug_var = Variable(mixed_img, requires_grad=True)
+        aug_var = preprocess_images(aug_var,processor,device)
         aug_logits = model(aug_var)
+        aug_logits = aug_logits.logits
         aug_loss_dict = criterion.get_loss(aug_logits, lbl)
         aug_losses = sum(aug_loss_dict[k] * criterion.weight_dict[k] for k in aug_loss_dict.keys() if k in criterion.weight_dict)
 

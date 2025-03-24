@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
     SBF_config = config.pop('saliency_balancing_fusion',OmegaConf.create())
 
-    model = instantiate_from_config(model_config)
+    # model = instantiate_from_config(model_config)
     
 
     # Load pretrained SegFormer model

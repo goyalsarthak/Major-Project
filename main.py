@@ -286,9 +286,10 @@ if __name__ == "__main__":
     print('optimization parameters: ', opt_params)
     opt = eval(optimizer_config['target'])(param_dicts, **opt_params)
 
-    if optimizer_config.lr_scheduler =='lambda':
+    if optimizer_config.lr_scheduler == 'lambda':
         def lambda_rule(epoch):
-            lr_l = 1.0 - max(0, epoch + 1 + 0 - 50) / float(optimizer_config.max_epoch-50 + 1)
+            min_lr_factor = 1e-6 / optimizer_config.learning_rate  # Prevents LR from reaching 0
+            lr_l = max(min_lr_factor, 1.0 - max(0, epoch + 1 - 50) / float(optimizer_config.max_epoch - 50 + 1))
             return lr_l
         scheduler = lr_scheduler.LambdaLR(opt, lr_lambda=lambda_rule)
     else:

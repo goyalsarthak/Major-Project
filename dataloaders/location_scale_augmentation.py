@@ -24,6 +24,12 @@ class LocationScaleAugmentation(object):
             x = torch.tensor(x).permute(2, 0, 1).unsqueeze(0)  # Convert to (1, C, H, W)
         
         print("After conversion - Shape of x:", x.shape, type(x))  # Debugging
+        print("Before conversion - Shape of x:", masks.shape, type(masks))  # Debugging
+        
+        if isinstance(masks, np.ndarray):  # If x is a NumPy array
+            masks = torch.tensor(masks).permute(2, 0, 1).unsqueeze(0)  # Convert to (1, C, H, W)
+        
+        print("After conversion - Shape of x:", masks.shape, type(masks))  # Debugging
         B, C, H, W = x.shape
         device = x.device
         

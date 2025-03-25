@@ -18,6 +18,9 @@ class LocationScaleAugmentation(object):
         self.vrange = vrange
         self.background_threshold = background_threshold
     def thin_plate_spline_transform(self, x, masks, control_points=9):
+        print("Shape of x:", x.shape)
+        x = x.unsqueeze(0)  # Adds batch dimension: (1, C, H, W)
+        print("Shape of x:", x.shape)
         B, C, H, W = x.shape
         device = x.device
         

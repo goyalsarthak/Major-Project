@@ -293,7 +293,9 @@ def evaluate(model: torch.nn.Module, data_loader: Iterable, device: torch.device
                 samples[k] = v.to(device)
         img = samples['images']
         lbl = samples['labels']
+        img = preprocess_images(img, processor, device)
         logits = model(img)
+        logits = F.interpolate(logits, size=lbl.shape[-2:], mode="bicubic", align_corners=False)
         num_classes=logits.size(1)
         pred=torch.argmax(logits,dim=1)
         one_hot_pred=convert_to_one_hot(pred,num_classes)
@@ -312,6 +314,7 @@ def prediction_wrapper(model, test_loader, epoch, label_name, mode = 'base', sav
         test_loader:    DataLoader Dataloader for the dataset to test
         mode:           str Adding a note for the saved testing results
     """
+    device = torch.device('cuda')
     model.eval()
     with torch.no_grad():
         out_prediction_list = {} # a buffer for saving results
@@ -334,7 +337,10 @@ def prediction_wrapper(model, test_loader, epoch, label_name, mode = 'base', sav
             img = batch['images'].cuda()
             gth = batch['labels'].cuda()
 
+            img = preprocess_images(img, processor, device)
             pred = model(img)
+            pred = F.interpolate(pred, size=gth.shape[-2:], mode="bicubic", align_corners=False)
+
             pred=torch.argmax(pred,1)
             curr_pred[slice_idx, ...]   = pred[0, ...] # nb (1), nc, nx, ny
             curr_gth[slice_idx, ...]    = gth[0, ...]

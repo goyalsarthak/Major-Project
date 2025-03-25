@@ -9,7 +9,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from monai.metrics import compute_meandice
 from torch.autograd import Variable
-from dataloaders.saliency_balancing_fusion import get_SBF_map
+from dataloaders.saliency_balancing_fusion import rescale_intensity
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -122,30 +122,61 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     print("Averaged stats:", metric_logger)
     return cur_iteration
 
-def aggregate_attention_maps(attention_maps):
+def process_attention_maps(attention_maps, target_size=(192, 192)):
     """
-    Extract and process attention maps from SegFormer, preserving batch size.
+    Process Segformer attention maps to extract, normalize, and resize them.
     
     Args:
-        attention_maps (tuple): Tuple of attention tensors from SegFormer
-        target_size (tuple): Desired output size for attention map
+        attention_maps (torch.Tensor): Attention maps from Segformer, shape (batch_size, num_heads, num_tokens, num_tokens).
+        target_size (tuple): The target spatial size for resizing the attention map.
     
     Returns:
-        torch.Tensor: Normalized attention maps of shape [batch_size, 1, 512, 512]
+        torch.Tensor: Processed attention maps resized to the target image size.
     """
-    attention_map = attention_maps[-1]
-    attention_map=torch.mean(attention_map.unsqueeze(1), dim=1)
-    attention_map = torch.mean(attention_map, dim=1)  # Shape: (32, 256, 256)
-    # Resize to target size for each sample in batch
-
-    resized_attn = F.interpolate(attention_map.unsqueeze(1), size=(192, 192), mode='bilinear', align_corners=False)
-
-    # Normalize to [0, 1] range for each sample
-    min_vals = resized_attn.amin(dim=[2, 3], keepdim=True)
-    max_vals = resized_attn.amax(dim=[2, 3], keepdim=True)
-    normalized_attn = (resized_attn - min_vals) / (max_vals - min_vals + 1e-8)
+    # Get the last layer's attention map
+    last_attention_map = attention_maps[-1]  # Shape: [batch_size, num_heads, num_tokens, num_tokens]
     
-    return normalized_attn
+    # Average across heads
+    attn_weights1 = last_attention_map.mean(dim=1)  # Shape: [batch_size, num_tokens, num_tokens]
+    
+    # Apply ReLU activation and reshape
+    # attention_head = F.relu(attn_weights1)  # Ensure non-negative values
+    
+    # Reshape for interpolation
+    attention_head = attn_weights1.unsqueeze(1)  # Add channel dimension
+    
+    # Resize to target image size
+    attn_map_resized = F.interpolate(attention_head, size=target_size, mode='bicubic', align_corners=False)
+    normalized_map = rescale_intensity(attn_map_resized)
+    
+    return normalized_map
+
+# def aggregate_attention_maps(attention_maps):
+#     """
+#     Extract and process attention maps from SegFormer, preserving batch size.
+    
+#     Args:
+#         attention_maps (tuple): Tuple of attention tensors from SegFormer
+#         target_size (tuple): Desired output size for attention map
+    
+#     Returns:
+#         torch.Tensor: Normalized attention maps of shape [batch_size, 1, 512, 512]
+#     """
+#     last_attention_map = attention_maps[-1]
+#     attn_weights1 = last_attention_map.mean(dim=1) 
+#     attention_map = attention_maps[-1]
+#     attention_map=torch.mean(attention_map.unsqueeze(1), dim=1)
+#     attention_map = torch.mean(attention_map, dim=1)  # Shape: (32, 256, 256)
+#     # Resize to target size for each sample in batch
+
+#     resized_attn = F.interpolate(attention_map.unsqueeze(1), size=(192, 192), mode='bilinear', align_corners=False)
+
+#     # Normalize to [0, 1] range for each sample
+#     min_vals = resized_attn.amin(dim=[2, 3], keepdim=True)
+#     max_vals = resized_attn.amax(dim=[2, 3], keepdim=True)
+#     normalized_attn = (resized_attn - min_vals) / (max_vals - min_vals + 1e-8)
+    
+#     return normalized_attn
 
 def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -218,7 +249,7 @@ def train_one_epoch_SBF(model: torch.nn.Module, criterion: torch.nn.Module,
         # saliency
         # gradient = torch.sqrt(torch.mean(attention_maps ** 2, dim=1, keepdim=True)).detach()
         # print("attention mapS :",attention_maps.shape)
-        saliency=aggregate_attention_maps(attention_maps)
+        saliency=process_attention_maps(attention_maps)
         # saliency = get_SBF_map(gradient,config.grid_size)
         # print("saliency shape ",saliency.shape)
         if visual_dict is not None:

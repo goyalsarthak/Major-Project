@@ -234,8 +234,8 @@ class AbdominalDataset(torch_data.Dataset):
             if self.location_scale is not None:
                 img = curr_dict["img"].copy()
                 lb = curr_dict["lb"].copy()
-                print("label shape :", lb.shape)
-                print("image shape :", img.shape)
+                # print("label shape :", lb.shape)
+                # print("image shape :", img.shape)
                 img= self.denorm_(img,curr_dict['vol_info'])
 
                 # GLA = self.location_scale.Global_Location_Scale_Augmentation(img.copy(), lb.astype(np.int32).copy())

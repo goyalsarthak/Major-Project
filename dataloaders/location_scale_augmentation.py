@@ -121,7 +121,9 @@ class LocationScaleAugmentation(object):
         return warped_image
 
     def non_linear_transformation(self, image, mask):
-        return self.thin_plate_spline_transform(image, mask)  # Replacing Bézier-based transformation with TPS
+        temp = self.thin_plate_spline_transform(image, mask)  # Replacing Bézier-based transformation with TPS
+
+        return temp
 
     def location_scale_transformation(self, inputs, slide_limit=20):
         scale = np.array(max(min(random.gauss(1, 0.1), 1.1), 0.9), dtype=np.float32)
@@ -135,16 +137,41 @@ class LocationScaleAugmentation(object):
         return image
 
     def Local_Location_Scale_Augmentation(self, image, mask):
-        output_image = np.zeros_like(image)
-        mask = mask.astype(np.int32)
+        """
+        Performs augmentation while preserving certain regions based on the mask.
 
-        output_image[mask == 0] = self.location_scale_transformation(self.non_linear_transformation(image, mask))
+        - Background (mask == 0): Always undergoes non-linear + scale transformations.
+        - Foreground (mask > 0): Has a 50% probability of undergoing non-linear transformation with inversion.
+        - Low-intensity pixels (<= background_threshold): Are preserved.
 
+        Args:
+            image (numpy.ndarray): Input image.
+            mask (numpy.ndarray): Mask with same dimensions as image.
+        
+        Returns:
+            numpy.ndarray: Augmented image.
+        """
+        output_image = np.copy(image)
+
+        # Apply non-linear and scale transformation to the background (mask == 0)
+        output_image[mask == 0] = self.location_scale_transformation(
+            self.non_linear_transformation(image, mask)
+        )
+
+        # Apply transformations to foreground regions (mask > 0) with 50% probability of inversion
         for c in range(1, np.max(mask) + 1):
             if (mask == c).sum() == 0:
                 continue
-            output_image[mask == c] = self.location_scale_transformation(self.non_linear_transformation(image, mask))
+            
+            transformed_region = self.non_linear_transformation(image, mask)
 
+            # Apply 50% probability of inversion
+            if random.random() < 0.5:
+                transformed_region = self.vrange[1] - transformed_region  # Invert the transformation
+            
+            output_image[mask == c] = self.location_scale_transformation(transformed_region)
+
+        # Preserve low-intensity pixels (≤ background_threshold)
         if self.background_threshold >= self.vrange[0]:
             output_image[image <= self.background_threshold] = image[image <= self.background_threshold]
 

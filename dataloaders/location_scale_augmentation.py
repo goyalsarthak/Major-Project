@@ -24,12 +24,12 @@ class LocationScaleAugmentation(object):
             x = torch.tensor(x).permute(2, 0, 1).unsqueeze(0)  # Convert to (1, C, H, W)
         
         print("After conversion - Shape of x:", x.shape, type(x))  # Debugging
-        print("Before conversion - Shape of x:", masks.shape, type(masks))  # Debugging
+        print("Before conversion - Shape of mask:", masks.shape, type(masks))  # Debugging
         
         if isinstance(masks, np.ndarray):  # If x is a NumPy array
             masks = torch.tensor(masks).permute(2, 0, 1).unsqueeze(0)  # Convert to (1, C, H, W)
         
-        print("After conversion - Shape of x:", masks.shape, type(masks))  # Debugging
+        print("After conversion - Shape of mask:", masks.shape, type(masks))  # Debugging
         B, C, H, W = x.shape
         device = x.device
         
@@ -113,7 +113,11 @@ class LocationScaleAugmentation(object):
         # transformed = F.grid_sample(
         #     x, grid, mode='bilinear', padding_mode='border', align_corners=True
         # )
-        
+        # Convert tensor back to NumPy
+        warped_image = warped_image.squeeze(0).permute(1, 2, 0).numpy()  # (1, C, H, W) → (H, W, C)
+
+        print("Converted NumPy shape:", warped_image.shape)  # Expected: (192, 192, 1)
+
         return warped_image
 
     def non_linear_transformation(self, image, mask):

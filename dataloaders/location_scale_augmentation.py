@@ -18,9 +18,12 @@ class LocationScaleAugmentation(object):
         self.vrange = vrange
         self.background_threshold = background_threshold
     def thin_plate_spline_transform(self, x, masks, control_points=9):
-        print("Shape of x:", x.shape)
-        x = x.unsqueeze(0)  # Adds batch dimension: (1, C, H, W)
-        print("Shape of x:", x.shape)
+        print("Before conversion - Shape of x:", x.shape, type(x))  # Debugging
+        
+        if isinstance(x, np.ndarray):  # If x is a NumPy array
+            x = torch.tensor(x).permute(2, 0, 1).unsqueeze(0)  # Convert to (1, C, H, W)
+        
+        print("After conversion - Shape of x:", x.shape, type(x))  # Debugging
         B, C, H, W = x.shape
         device = x.device
         

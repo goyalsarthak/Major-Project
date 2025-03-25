@@ -18,18 +18,18 @@ class LocationScaleAugmentation(object):
         self.vrange = vrange
         self.background_threshold = background_threshold
     def thin_plate_spline_transform(self, x, masks, control_points=9):
-        print("Before conversion - Shape of x:", x.shape, type(x))  # Debugging
+        # print("Before conversion - Shape of x:", x.shape, type(x))  # Debugging
         
         if isinstance(x, np.ndarray):  # If x is a NumPy array
             x = torch.tensor(x).permute(2, 0, 1).unsqueeze(0)  # Convert to (1, C, H, W)
         
-        print("After conversion - Shape of x:", x.shape, type(x))  # Debugging
-        print("Before conversion - Shape of mask:", masks.shape, type(masks))  # Debugging
+        # print("After conversion - Shape of x:", x.shape, type(x))  # Debugging
+        # print("Before conversion - Shape of mask:", masks.shape, type(masks))  # Debugging
         
         if isinstance(masks, np.ndarray):  # If x is a NumPy array
             masks = torch.tensor(masks).permute(2, 0, 1).unsqueeze(0)  # Convert to (1, C, H, W)
         
-        print("After conversion - Shape of mask:", masks.shape, type(masks))  # Debugging
+        # print("After conversion - Shape of mask:", masks.shape, type(masks))  # Debugging
         B, C, H, W = x.shape
         device = x.device
         
@@ -116,7 +116,7 @@ class LocationScaleAugmentation(object):
         # Convert tensor back to NumPy
         warped_image = warped_image.squeeze(0).permute(1, 2, 0).numpy()  # (1, C, H, W) → (H, W, C)
 
-        print("Converted NumPy shape:", warped_image.shape)  # Expected: (192, 192, 1)
+        # print("Converted NumPy shape:", warped_image.shape)  # Expected: (192, 192, 1)
 
         return warped_image
 
@@ -136,43 +136,37 @@ class LocationScaleAugmentation(object):
         image = self.location_scale_transformation(image).astype(np.float32)
         return image
 
+    # import numpy as np
+
     def Local_Location_Scale_Augmentation(self, image, mask):
-        """
-        Performs augmentation while preserving certain regions based on the mask.
-
-        - Background (mask == 0): Always undergoes non-linear + scale transformations.
-        - Foreground (mask > 0): Has a 50% probability of undergoing non-linear transformation with inversion.
-        - Low-intensity pixels (<= background_threshold): Are preserved.
-
-        Args:
-            image (numpy.ndarray): Input image.
-            mask (numpy.ndarray): Mask with same dimensions as image.
+        output_image = np.zeros_like(image)
+        mask = mask.astype(np.int32)
         
-        Returns:
-            numpy.ndarray: Augmented image.
-        """
-        output_image = np.copy(image)
+        # Background processing
+        bg_mask = (mask == 0)
+        bg_pixels = image[bg_mask]
+        if bg_pixels.size > 0:
+            # Preserve spatial structure for TPS
+            bg_3d = image.copy()
+            bg_3d[~bg_mask] = 0  # Zero out non-background pixels
+            transformed_bg = self.non_linear_transformation(bg_3d, bg_mask)
+            output_image[bg_mask] = self.location_scale_transformation(transformed_bg[bg_mask])
 
-        # Apply non-linear and scale transformation to the background (mask == 0)
-        output_image[mask == 0] = self.location_scale_transformation(
-            self.non_linear_transformation(image, mask)
-        )
-
-        # Apply transformations to foreground regions (mask > 0) with 50% probability of inversion
+        # Foreground processing
         for c in range(1, np.max(mask) + 1):
-            if (mask == c).sum() == 0:
+            fg_mask = (mask == c)
+            if np.sum(fg_mask) == 0:
                 continue
-            
-            transformed_region = self.non_linear_transformation(image, mask)
+                
+            # Preserve spatial structure for TPS
+            fg_3d = image.copy()
+            fg_3d[~fg_mask] = 0  # Zero out non-region pixels
+            transformed_fg = self.non_linear_transformation(fg_3d, fg_mask)
+            output_image[fg_mask] = self.location_scale_transformation(transformed_fg[fg_mask])
 
-            # Apply 50% probability of inversion
-            if random.random() < 0.5:
-                transformed_region = self.vrange[1] - transformed_region  # Invert the transformation
-            
-            output_image[mask == c] = self.location_scale_transformation(transformed_region)
-
-        # Preserve low-intensity pixels (≤ background_threshold)
         if self.background_threshold >= self.vrange[0]:
             output_image[image <= self.background_threshold] = image[image <= self.background_threshold]
 
         return output_image
+
+

@@ -238,8 +238,8 @@ class AbdominalDataset(torch_data.Dataset):
                 print("image shape :", img.shape)
                 img= self.denorm_(img,curr_dict['vol_info'])
 
-                GLA = self.location_scale.Global_Location_Scale_Augmentation(img.copy(), lb.astype(np.int32).copy())
-                GLA = self.renorm_( GLA , curr_dict['vol_info'])
+                # GLA = self.location_scale.Global_Location_Scale_Augmentation(img.copy(), lb.astype(np.int32).copy())
+                GLA = self.renorm_( img , curr_dict['vol_info'])#we will fix it back to GLA
 
                 LLA = self.location_scale.Local_Location_Scale_Augmentation(img.copy(), lb.astype(np.int32))
                 LLA = self.renorm_( LLA, curr_dict['vol_info'])

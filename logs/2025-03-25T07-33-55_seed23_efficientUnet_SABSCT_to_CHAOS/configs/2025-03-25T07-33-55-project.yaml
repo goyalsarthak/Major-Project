@@ -6,20 +6,17 @@ model:
     in_channels: 1
     classes: 5
     activation: null
-
 optimizer:
   target: torch.optim.Adam
-  learning_rate: 3e-4
-  weight_decay: 3e-5
+  learning_rate: 0.0003
+  weight_decay: 3.0e-05
   max_epoch: 2000
   max_iter: -1
   warmup_iter: -1
   lr_scheduler: lambda
-
 saliency_balancing_fusion:
   usage: true
   grid_size: 3
-
 data:
   target: main.DataModuleFromConfig
   params:
@@ -30,17 +27,17 @@ data:
       params:
         location_scale: true
         modality:
-          - SABSCT
+        - SABSCT
         tile_z_dim: 1
     validation:
       target: dataloaders.AbdominalDataset.get_validation
       params:
         modality:
-          - SABSCT
+        - SABSCT
         tile_z_dim: 1
     test:
       target: dataloaders.AbdominalDataset.get_test_all
       params:
         modality:
-          - CHAOST2
+        - CHAOST2
         tile_z_dim: 1

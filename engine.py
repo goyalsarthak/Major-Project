@@ -294,7 +294,8 @@ def evaluate(model: torch.nn.Module, data_loader: Iterable, device: torch.device
         img = samples['images']
         lbl = samples['labels']
         img = preprocess_images(img, processor, device)
-        logits = model(img)
+        output = model(img)
+        logits = output.logits
         logits = F.interpolate(logits, size=lbl.shape[-2:], mode="bicubic", align_corners=False)
         num_classes=logits.size(1)
         pred=torch.argmax(logits,dim=1)
@@ -338,7 +339,8 @@ def prediction_wrapper(model, test_loader, epoch, label_name, mode = 'base', sav
             gth = batch['labels'].cuda()
 
             img = preprocess_images(img, processor, device)
-            pred = model(img)
+            output = model(img)
+            pred = output.logits
             pred = F.interpolate(pred, size=gth.shape[-2:], mode="bicubic", align_corners=False)
 
             pred=torch.argmax(pred,1)
